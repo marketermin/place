@@ -1,5 +1,14 @@
 -- Run once in a NEW Supabase project's SQL Editor.
 create table public.admins (user_id uuid primary key references auth.users(id) on delete cascade);
+create table public.profiles (user_id uuid primary key references auth.users(id) on delete cascade, full_name text not null, phone text not null, email text not null, created_at timestamptz not null default now());
+alter table public.profiles enable row level security;
+create policy profile_own_read on public.profiles for select to authenticated using(user_id=auth.uid());
+create policy profile_own_update on public.profiles for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+revoke all on public.profiles from anon,authenticated;
+grant select,update on public.profiles to authenticated;
+create function public.create_profile() returns trigger language plpgsql security definer set search_path='' as $$ begin insert into public.profiles(user_id,full_name,phone,email) values(new.id,coalesce(new.raw_user_meta_data->>'full_name',''),coalesce(new.raw_user_meta_data->>'phone',''),new.email); return new; end; $$;
+create trigger on_auth_user_created after insert on auth.users for each row execute function public.create_profile();
+revoke all on function public.create_profile() from public,anon,authenticated;
 alter table public.admins enable row level security;
 revoke all on public.admins from anon, authenticated;
 create function public.is_admin() returns boolean language sql stable security definer set search_path='' as $$
