@@ -1,0 +1,12 @@
+'use server';
+import {requireAdmin,serverClient,configured} from '@/lib/supabase';
+import {businessSchema,rankSchema,type BusinessInput,type RankInput} from '@/lib/validation';
+import type {Snapshot} from '@/lib/domain';
+import {z} from 'zod';
+export async function loadData():Promise<Snapshot>{const db=await requireAdmin();const {data,error}=await db.rpc('dashboard');if(error)throw new Error('기록을 불러오지 못했습니다. 연결 상태를 확인해 주세요.');return data as Snapshot;}
+export async function saveBusiness(input:BusinessInput){const p=businessSchema.parse(input);const db=await requireAdmin();const {error}=await db.rpc('save_business',{p_id:p.id??null,p_name:p.name,p_url:p.place_url,p_start:p.start_date,p_terms:p.keywords});if(error)throw new Error('업장 저장에 실패했습니다. 입력 내용과 연결을 확인해 주세요.');}
+export async function deleteBusiness(id:string){z.uuid().parse(id);const db=await requireAdmin();const {error}=await db.rpc('delete_business',{p_id:id});if(error)throw new Error('업장을 삭제하지 못했습니다.');}
+export async function saveRank(input:RankInput){const p=rankSchema.parse(input);const db=await requireAdmin();const {error}=await db.rpc('save_rank',{p_keyword:p.keyword_id,p_date:p.date,p_rank:p.rank,p_location:p.location,p_surface:p.surface,p_note:p.note});if(error)throw new Error('순위를 저장하지 못했습니다. 입력 내용과 연결을 확인해 주세요.');}
+export async function readNotice(keyword:string,stage:number){z.uuid().parse(keyword);z.number().int().min(20).max(25).parse(stage);const db=await requireAdmin();const {error}=await db.rpc('read_notice',{p_keyword:keyword,p_stage:stage});if(error)throw new Error('알림을 변경하지 못했습니다.');}
+export async function login(email:string,password:string){if(!configured())return {error:'아직 Supabase가 연결되지 않았습니다.'};if(!z.email().safeParse(email).success||!password)return {error:'이메일과 비밀번호를 확인해 주세요.'};const db=await serverClient();const result=await db.auth.signInWithPassword({email,password});if(result.error)return {error:'이메일 또는 비밀번호가 올바르지 않습니다.'};const admin=await db.rpc('is_admin');if(admin.error||!admin.data){await db.auth.signOut();return {error:'등록된 관리자만 로그인할 수 있습니다.'};}return {ok:true};}
+export async function logout(){const db=await serverClient();const {error}=await db.auth.signOut();if(error)throw new Error('로그아웃하지 못했습니다. 다시 시도해 주세요.');}
